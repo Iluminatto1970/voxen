@@ -165,18 +165,24 @@ exit 1
 EOF
   chmod +x "$BIN_DIR/voxen-update"
 
-cat > "$BIN_DIR/voxen-init" <<EOF
+cat > "$BIN_DIR/voxen-init" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 PROJECT_DIR="\${1:-\$PWD}"
+VOXEN_INSTALL_DIR="\${VOXEN_INSTALL_DIR:-\$HOME/.voxen}"
+SRC_DIR="\$VOXEN_INSTALL_DIR/src"
+INSTALL_BIN_DIR="\$VOXEN_INSTALL_DIR/bin"
 mkdir -p "\$PROJECT_DIR/.voxen/bin"
 cat > "\$PROJECT_DIR/.voxen/bin/voxen" <<'EOV'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ -x "$INSTALL_BIN_DIR/voxen_auto_update.sh" ]]; then
-  "$INSTALL_BIN_DIR/voxen_auto_update.sh" || true
+VOXEN_INSTALL_DIR="\${VOXEN_INSTALL_DIR:-\$HOME/.voxen}"
+SRC_DIR="\$VOXEN_INSTALL_DIR/src"
+INSTALL_BIN_DIR="\$VOXEN_INSTALL_DIR/bin"
+if [[ -x "\$INSTALL_BIN_DIR/voxen_auto_update.sh" ]]; then
+  "\$INSTALL_BIN_DIR/voxen_auto_update.sh" || true
 fi
-exec python3 "$SRC_DIR/voxen.py" "\$@"
+exec python3 "\$SRC_DIR/voxen.py" "\$@"
 EOV
 chmod +x "\$PROJECT_DIR/.voxen/bin/voxen"
 mkdir -p "\$PROJECT_DIR/.opencode/commands"
