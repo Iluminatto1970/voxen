@@ -66,5 +66,15 @@ class StrategicTriage:
             return "SUPPORT_AGENT", "Foco em RAG, VectorDB e APIs de mensageria."
         return "MVP_GENERIC", "Foco em validacao rapida de ideia."
 
+    def infer_strategy(self, instruction: str = "") -> tuple[str, str]:
+        text = instruction.lower()
+        if any(token in text for token in ["saas", "assinatura", "checkout", "stripe", "billing"]):
+            return "MICRO_SAAS", "Foco em Stripe, Auth e UI de conversao."
+        if any(token in text for token in ["cli", "terminal", "script", "devtool", "sdk", "compiler"]):
+            return "DEV_TOOL_CLI", "Foco em Rust/Python, latencia zero e seguranca."
+        if any(token in text for token in ["suporte", "atendimento", "chat", "whatsapp", "rag", "knowledge base"]):
+            return "SUPPORT_AGENT", "Foco em RAG, VectorDB e APIs de mensageria."
+        return "MVP_GENERIC", "Foco em validacao rapida de ideia."
+
 
 triage = StrategicTriage()

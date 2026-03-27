@@ -54,4 +54,22 @@ def get_blueprints() -> dict[str, list[dict]]:
                 "instruction": "Configurar playbook de retencao e coleta de feedback dos usuarios.",
             },
         ],
+        "mvp_generic": [
+            {
+                "role": "Manager",
+                "instruction": "Definir problema, publico e criterio de sucesso do MVP.",
+            },
+            {
+                "role": "Dev",
+                "instruction": "Implementar fluxo central da solucao com arquitetura simples e extensivel.",
+            },
+            {
+                "role": "Tester",
+                "instruction": "Validar fluxo principal, casos de erro e estabilidade basica.",
+            },
+            {
+                "role": "Growth",
+                "instruction": "Definir experimento de validacao com usuarios e metricas iniciais.",
+            },
+        ],
     }

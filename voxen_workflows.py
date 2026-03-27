@@ -105,15 +105,15 @@ class VoxenWorkflows:
 
     def build_steps(self, workflow: str, intent: str) -> list[dict]:
         normalized = workflow.strip().lower()
-        if normalized in self._workflows:
-            base = self._workflows[normalized]
-        elif normalized in self._external_workflows:
+        if normalized in self._external_workflows:
             description = self._external_workflows[normalized]
             base = [
                 (AgentRole.MANAGER, f"Aplicar workflow externo '{normalized}' com foco no objetivo informado. {description}"),
-                (AgentRole.DEVELOPER, f"Executar passos tecnicos do workflow '{normalized}' de forma incremental e segura."),
-                (AgentRole.QA, f"Validar entrega e riscos do workflow '{normalized}' com criterios objetivos."),
+                (AgentRole.DEVELOPER, f"Consolidar plano tecnico do workflow externo '{normalized}' com passos acionaveis."),
+                (AgentRole.QA, f"Definir validacao e criterios de aceite para o workflow externo '{normalized}'."),
             ]
+        elif normalized in self._workflows:
+            base = self._workflows[normalized]
         else:
             base = self._workflows["create"]
         steps = []

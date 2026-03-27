@@ -2,7 +2,10 @@ import argparse
 import os
 from pathlib import Path
 
-from voxen_cli import main, run_single_command
+from voxen_cli import main, run_interactive_command, run_single_command
+
+
+INTERACTIVE_COMMAND_PREFIX = "__VOXEN_INTERACTIVE_COMMAND__::"
 
 
 def _load_env_file(file_path: Path) -> None:
@@ -36,6 +39,83 @@ def _bootstrap_env() -> None:
         _load_env_file(candidate)
 
 
+def _normalize_direct_input(tokens: list[str], raw: str = "") -> str:
+    text = (raw or "").strip()
+    if text:
+        lowered = text.lower()
+        interactive_aliases = {
+            "/voxen-plan": "/voxen plan",
+            "voxen-plan": "/voxen plan",
+            "/voxen-brainstorm": "/voxen brainstorm",
+            "voxen-brainstorm": "/voxen brainstorm",
+            "/voxen-create": "/voxen create",
+            "voxen-create": "/voxen create",
+            "/voxen-debug": "/voxen debug",
+            "voxen-debug": "/voxen debug",
+            "/voxen-enhance": "/voxen enhance",
+            "voxen-enhance": "/voxen enhance",
+            "/voxen-preview": "/voxen preview",
+            "voxen-preview": "/voxen preview",
+            "/voxen-orchestrate": "/voxen orchestrate",
+            "voxen-orchestrate": "/voxen orchestrate",
+            "/voxen-test": "/voxen test",
+            "voxen-test": "/voxen test",
+            "/voxen-deploy": "/voxen deploy",
+            "voxen-deploy": "/voxen deploy",
+            "/voxen-status": "/voxen status",
+            "voxen-status": "/voxen status",
+            "/voxen-ui-ux-pro-max": "/voxen ui-ux-pro-max",
+            "voxen-ui-ux-pro-max": "/voxen ui-ux-pro-max",
+            "/voxen-discovery-to-delivery": "/voxen discovery-to-delivery",
+            "voxen-discovery-to-delivery": "/voxen discovery-to-delivery",
+        }
+        if lowered in interactive_aliases:
+            target = interactive_aliases[lowered]
+            return f"{INTERACTIVE_COMMAND_PREFIX}{target}"
+        for alias, target in interactive_aliases.items():
+            prefix = f"{alias} "
+            if lowered.startswith(prefix):
+                suffix = text[len(prefix):].strip()
+                full_target = f"{target} {suffix}".strip()
+                return f"{INTERACTIVE_COMMAND_PREFIX}{full_target}"
+        if text.startswith("/voxen ") or text == "/voxen":
+            return text
+        if text.startswith("/"):
+            return f"/voxen {text[1:]}"
+        parts = text.split(None, 1)
+        if parts and parts[0].lower() in {
+            "plan",
+            "brainstorm",
+            "create",
+            "debug",
+            "enhance",
+            "preview",
+            "orchestrate",
+            "test",
+            "deploy",
+            "ui-ux-pro-max",
+            "discovery-to-delivery",
+            "workflow",
+            "status",
+            "skills",
+            "list",
+            "context",
+            "route",
+            "workflows",
+            "specialists",
+            "bundle",
+            "eval",
+            "profiles",
+        }:
+            return f"/voxen {text}"
+        return text
+
+    joined = " ".join(tokens).strip()
+    if not joined:
+        return ""
+    return _normalize_direct_input([], joined)
+
+
 if __name__ == "__main__":
     _bootstrap_env()
     parser = argparse.ArgumentParser(description="Voxen CLI")
@@ -44,7 +124,16 @@ if __name__ == "__main__":
         help="Executa comando direto; encadeie com ';;' (ex: '/voxen context;;/voxen status')",
         default="",
     )
+    parser.add_argument(
+        "command",
+        nargs="*",
+        help="Atalho: voxen plan <texto> | voxen brainstorm <texto> | voxen /voxen <comando>",
+    )
     args = parser.parse_args()
-    if args.cmd:
-        raise SystemExit(run_single_command(args.cmd))
+    direct_cmd = _normalize_direct_input(args.command, args.cmd)
+    if direct_cmd.startswith(INTERACTIVE_COMMAND_PREFIX):
+        command = direct_cmd.replace(INTERACTIVE_COMMAND_PREFIX, "", 1)
+        raise SystemExit(run_interactive_command(command))
+    if direct_cmd:
+        raise SystemExit(run_single_command(direct_cmd))
     main()

@@ -88,6 +88,8 @@ class PipelineRunner:
                 "role": role.value,
                 "final_status": result.get("final_status", result.get("status", "unknown")),
             }
+            if result.get("deliverable_file"):
+                result_line["deliverable_file"] = result["deliverable_file"]
             results.append(result_line)
 
             self.memory.remember(

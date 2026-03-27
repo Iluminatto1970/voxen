@@ -1,4 +1,6 @@
 import re
+import subprocess
+import json
 from pathlib import Path
 
 from memory_hub import MemoryHub
@@ -95,7 +97,7 @@ def install_opencode_voxen_command(project_path: Path) -> str:
         "4) Nao invente comandos; somente os definidos em '/voxen help'.\n\n"
         "Roteamento:\n"
         "- Se '$ARGUMENTS' comecar com: 'brainstorm', 'plan', 'create', 'debug', 'enhance',\n"
-        "  'preview', 'orchestrate', 'test', 'deploy' ou 'workflow', nao rode CLI de imediato.\n"
+        "  'preview', 'orchestrate', 'test', 'deploy', 'ui-ux-pro-max', 'discovery-to-delivery' ou 'workflow', nao rode CLI de imediato.\n"
         "  Conduza conversa guiada, levante contexto essencial e ofereca opcoes com tradeoffs.\n\n"
         "- Se '$ARGUMENTS' comecar com: 'status', 'skills', 'list', 'context', 'route',\n"
         "  'workflows', 'specialists', 'bundle', 'eval', 'profiles', execute:\n\n"
@@ -143,6 +145,159 @@ def route_to_serializable(route: dict) -> dict:
         "specialist": route.get("specialist", "backend-specialist"),
         "score": route.get("score", 0),
         "forced": route.get("forced", False),
+    }
+
+
+def _run_command(command: list[str], cwd: str = ".") -> dict:
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        return {
+            "ok": result.returncode == 0,
+            "code": result.returncode,
+            "stdout": result.stdout.strip(),
+            "stderr": result.stderr.strip(),
+        }
+    except Exception as exc:
+        return {"ok": False, "code": 1, "stdout": "", "stderr": str(exc)}
+
+
+def _project_has_package_json(project_root: str = ".") -> bool:
+    return Path(project_root, "package.json").exists()
+
+
+def _read_package_scripts(project_root: str = ".") -> dict:
+    pkg_file = Path(project_root, "package.json")
+    if not pkg_file.exists():
+        return {}
+    try:
+        data = json.loads(pkg_file.read_text(encoding="utf-8"))
+        scripts = data.get("scripts", {})
+        return scripts if isinstance(scripts, dict) else {}
+    except Exception:
+        return {}
+
+
+def _run_preview_command(action: str, port: str = "3000", project_root: str = ".") -> dict:
+    script = Path(project_root, ".agent", "scripts", "auto_preview.py")
+    if not script.exists():
+        return {"ok": False, "code": 1, "stdout": "", "stderr": "auto_preview.py nao encontrado"}
+
+    if action == "restart":
+        stop_result = _run_command(["python", str(script), "stop"], cwd=project_root)
+        start_result = _run_command(["python", str(script), "start", port], cwd=project_root)
+        return {
+            "ok": stop_result["ok"] and start_result["ok"],
+            "code": 0 if (stop_result["ok"] and start_result["ok"]) else 1,
+            "stdout": "\n".join(item for item in [stop_result.get("stdout", ""), start_result.get("stdout", "")] if item),
+            "stderr": "\n".join(item for item in [stop_result.get("stderr", ""), start_result.get("stderr", "")] if item),
+        }
+
+    if action == "check":
+        status = _run_command(["python", str(script), "status"], cwd=project_root)
+        healthy = "running" in status.get("stdout", "").lower() or "status: running" in status.get("stdout", "").lower()
+        return {
+            "ok": status["ok"] and healthy,
+            "code": 0 if (status["ok"] and healthy) else 1,
+            "stdout": status.get("stdout", ""),
+            "stderr": status.get("stderr", "") if healthy else (status.get("stderr", "") or "preview nao esta ativo"),
+        }
+
+    cmd = ["python", str(script), action]
+    if action == "start":
+        cmd.append(port)
+    return _run_command(cmd, cwd=project_root)
+
+
+def _run_test_command(mode: str = "all", project_root: str = ".") -> dict:
+    scripts = _read_package_scripts(project_root)
+    if _project_has_package_json(project_root) and "test" in scripts:
+        if mode == "coverage":
+            return _run_command(["npm", "test", "--", "--coverage"], cwd=project_root)
+        if mode == "watch":
+            return _run_command(["npm", "test", "--", "--watch"], cwd=project_root)
+        return _run_command(["npm", "test"], cwd=project_root)
+
+    if mode == "coverage":
+        return _run_command(["pytest", "--cov=.", "-q"], cwd=project_root)
+    if mode == "watch":
+        return {"ok": False, "code": 1, "stdout": "", "stderr": "watch mode nao suportado para pytest neste wrapper"}
+    return _run_command(["pytest", "-q"], cwd=project_root)
+
+
+def _run_deploy_subcommand(subcommand: str, project_root: str = ".", url: str = "") -> dict:
+    checklist = Path(project_root, ".agent", "scripts", "checklist.py")
+    verify_all = Path(project_root, ".agent", "scripts", "verify_all.py")
+
+    if subcommand == "check":
+        if not checklist.exists():
+            return {"ok": False, "code": 1, "stdout": "", "stderr": "checklist.py nao encontrado"}
+        cmd = ["python", str(checklist), project_root]
+        return _run_command(cmd, cwd=project_root)
+
+    if subcommand in {"preview", "production"}:
+        if not verify_all.exists():
+            return {"ok": False, "code": 1, "stdout": "", "stderr": "verify_all.py nao encontrado"}
+        target_url = url or "http://localhost:3000"
+        result = _run_command(["python", str(verify_all), project_root, "--url", target_url], cwd=project_root)
+        return result
+
+    if subcommand == "rollback":
+        return {
+            "ok": True,
+            "code": 0,
+            "stdout": "Rollback logico registrado. Reative a release anterior no provedor de deploy.",
+            "stderr": "",
+        }
+
+    return {"ok": False, "code": 1, "stdout": "", "stderr": f"Subcomando de deploy invalido: {subcommand}"}
+
+
+def _collect_status_snapshot(bridge: VoxenBridge, mode_name: str, workspace_dir: str, project_root: str = ".") -> dict:
+    session_script = Path(project_root, ".agent", "scripts", "session_manager.py")
+    preview_script = Path(project_root, ".agent", "scripts", "auto_preview.py")
+
+    session_info = {}
+    preview_status = {}
+
+    if session_script.exists():
+        info_result = _run_command(["python", str(session_script), "info", project_root], cwd=project_root)
+        if info_result["ok"] and info_result.get("stdout"):
+            try:
+                session_info = json.loads(info_result["stdout"])
+            except Exception:
+                session_info = {"raw": info_result["stdout"]}
+
+    if preview_script.exists():
+        preview_result = _run_command(["python", str(preview_script), "status"], cwd=project_root)
+        preview_status = {
+            "ok": preview_result["ok"],
+            "details": preview_result.get("stdout", "") or preview_result.get("stderr", ""),
+        }
+
+    tasks_by_status = {
+        "pending": len(bridge.manager.list_tasks("pending")),
+        "in_progress": len(bridge.manager.list_tasks("in_progress")),
+        "failed": len(bridge.manager.list_tasks("failed")),
+        "completed": len(bridge.manager.list_tasks("completed")),
+    }
+
+    return {
+        "mode": mode_name,
+        "workspace": workspace_dir,
+        "project": {
+            "name": session_info.get("name", Path(project_root).resolve().name),
+            "version": session_info.get("version", "unknown"),
+            "stack": session_info.get("stack", []),
+            "scripts": session_info.get("scripts", []),
+        },
+        "tasks": tasks_by_status,
+        "preview": preview_status,
     }
 
 
@@ -201,7 +356,22 @@ def voxen_help() -> None:
     print("/voxen orchestrate <texto>")
     print("/voxen debug <texto>")
     print("/voxen test <texto>")
+    print("/voxen test")
+    print("/voxen test coverage")
+    print("/voxen test watch")
     print("/voxen deploy <texto>")
+    print("/voxen deploy")
+    print("/voxen deploy check")
+    print("/voxen deploy preview")
+    print("/voxen deploy production")
+    print("/voxen deploy rollback")
+    print("/voxen preview")
+    print("/voxen preview start [porta]")
+    print("/voxen preview stop")
+    print("/voxen preview restart [porta]")
+    print("/voxen preview check")
+    print("/voxen ui-ux-pro-max <texto>")
+    print("/voxen discovery-to-delivery <texto>")
     print("/voxen parallel <cmd1 || cmd2 || ...>")
     print("/voxen route <texto>")
     print("/voxen suggest <texto>")
@@ -228,7 +398,7 @@ def bootstrap_runtime(interactive: bool = True) -> dict:
         "MICRO_SAAS": "micro_saas",
         "DEV_TOOL_CLI": "dev_tool_cli",
         "SUPPORT_AGENT": "support_agent",
-        "MVP_GENERIC": "micro_saas",
+        "MVP_GENERIC": "mvp_generic",
     }
     lock_data = triage.load_lock()
     if lock_data and not lock_data.get("first_deploy_completed", False):
@@ -239,7 +409,8 @@ def bootstrap_runtime(interactive: bool = True) -> dict:
             triage.save_lock(selected_mode, instruction)
             mode_name = mode_lookup.get(selected_mode, "micro_saas")
         else:
-            mode_name = "micro_saas"
+            inferred_mode, _ = triage.infer_strategy("")
+            mode_name = mode_lookup.get(inferred_mode, "mvp_generic")
 
     orchestrator.deploy_war_room(mode_name)
     workspace_dir = str(orchestrator.get_workspace_for_mode(mode_name))
@@ -402,6 +573,60 @@ def handle_voxen_command(
     if command == "/voxen workflows":
         print(workflows.names())
         return
+
+    if command in {"/voxen preview", "/voxen preview status"}:
+        result = _run_preview_command("status", project_root=".")
+        print(result["stdout"] or result["stderr"] or result)
+        return
+    if command.startswith("/voxen preview "):
+        payload = command.replace("/voxen preview ", "", 1).strip()
+        parts = payload.split()
+        action = parts[0].lower() if parts else "status"
+        if action in {"start", "restart"}:
+            port = parts[1] if len(parts) > 1 else "3000"
+            result = _run_preview_command(action, port=port, project_root=".")
+        elif action in {"stop", "status", "check"}:
+            result = _run_preview_command(action, project_root=".")
+        else:
+            intent = payload or "preview geral"
+            print(runner.run(pipeline_name="workflow_preview", steps=workflows.build_steps("preview", intent)))
+            return
+        print(result["stdout"] or result["stderr"] or result)
+        return
+
+    if command == "/voxen test":
+        result = _run_test_command(mode="all", project_root=".")
+        print(result["stdout"] or result["stderr"] or result)
+        return
+    if command.startswith("/voxen test "):
+        payload = command.replace("/voxen test ", "", 1).strip().lower()
+        if payload in {"coverage", "watch"}:
+            result = _run_test_command(mode=payload, project_root=".")
+            print(result["stdout"] or result["stderr"] or result)
+            return
+
+    if command == "/voxen deploy":
+        if allow_prompt:
+            choice = (input("Deploy mode [check/preview/production/rollback] [check]: ").strip() or "check").lower()
+            url = ""
+            if choice in {"preview", "production"}:
+                url = input("URL para verificacao [http://localhost:3000]: ").strip() or "http://localhost:3000"
+            result = _run_deploy_subcommand(choice, project_root=".", url=url)
+            print(result["stdout"] or result["stderr"] or result)
+            return
+        result = _run_deploy_subcommand("check", project_root=".")
+        print(result["stdout"] or result["stderr"] or result)
+        return
+    if command.startswith("/voxen deploy "):
+        payload = command.replace("/voxen deploy ", "", 1).strip()
+        parts = payload.split()
+        subcommand = parts[0].lower() if parts else "check"
+        if subcommand in {"check", "preview", "production", "rollback"}:
+            url = parts[1] if len(parts) > 1 else ""
+            result = _run_deploy_subcommand(subcommand, project_root=".", url=url)
+            print(result["stdout"] or result["stderr"] or result)
+            return
+
     if command.startswith("/voxen workflow "):
         payload = command.replace("/voxen workflow ", "", 1).strip()
         parts = payload.split(" ", 1)
@@ -414,7 +639,54 @@ def handle_voxen_command(
         print(runner.run_parallel_commands("parallel_commands", commands, max_workers=min(4, len(commands))))
         return
 
-    for shortcut in ["plan", "enhance", "preview", "orchestrate", "debug", "test", "deploy", "create"]:
+    if command == "/voxen orchestrate":
+        if not allow_prompt:
+            print("Uso: /voxen orchestrate <objetivo>\n")
+            return
+        intent = input("Objetivo de orquestracao: ").strip()
+        if not intent:
+            print("Objetivo vazio.\n")
+            return
+        approved = (input("Plan criado. Aprova inicio da implementacao? (s/n) [s]: ").strip().lower() or "s") in {"s", "sim", "y", "yes"}
+        if not approved:
+            print("Orquestracao pausada: plano nao aprovado.\n")
+            return
+        result = runner.run(pipeline_name="workflow_orchestrate", steps=workflows.build_steps("orchestrate", intent))
+        scripts = [
+            _run_command(["python", ".agent/scripts/checklist.py", "."], cwd="."),
+        ]
+        print(
+            {
+                "orchestration": result,
+                "validation": [{"ok": item["ok"], "code": item["code"]} for item in scripts],
+                "agents_invoked": 3,
+            }
+        )
+        return
+    if command.startswith("/voxen orchestrate "):
+        intent = command.replace("/voxen orchestrate ", "", 1).strip()
+        if allow_prompt:
+            approved = (input("Plan criado. Aprova inicio da implementacao? (s/n) [s]: ").strip().lower() or "s") in {"s", "sim", "y", "yes"}
+            if not approved:
+                print("Orquestracao pausada: plano nao aprovado.\n")
+                return
+        result = runner.run(pipeline_name="workflow_orchestrate", steps=workflows.build_steps("orchestrate", intent))
+        validation = _run_command(["python", ".agent/scripts/checklist.py", "."], cwd=".")
+        print({"orchestration": result, "validation": {"ok": validation["ok"], "code": validation["code"]}, "agents_invoked": 3})
+        return
+
+    for shortcut in ["plan", "enhance", "preview", "orchestrate", "debug", "test", "deploy", "create", "ui-ux-pro-max", "discovery-to-delivery"]:
+        bare = f"/voxen {shortcut}"
+        if command == bare:
+            if not allow_prompt:
+                print(f"Uso: {bare} <objetivo>\n")
+                return
+            intent = input(f"Objetivo para {shortcut}: ").strip()
+            if not intent:
+                print("Objetivo vazio.\n")
+                return
+            print(runner.run(pipeline_name=f"workflow_{shortcut}", steps=workflows.build_steps(shortcut, intent)))
+            return
         prefix = f"/voxen {shortcut} "
         if command.startswith(prefix):
             intent = command.replace(prefix, "", 1).strip() or "entrega solicitada"
@@ -440,12 +712,7 @@ def handle_voxen_command(
         print(bridge.evaluator.summary())
         return
     if command == "/voxen status":
-        print({
-            "pending": len(bridge.manager.list_tasks("pending")),
-            "in_progress": len(bridge.manager.list_tasks("in_progress")),
-            "failed": len(bridge.manager.list_tasks("failed")),
-            "completed": len(bridge.manager.list_tasks("completed")),
-        })
+        print(_collect_status_snapshot(bridge, mode_name, workspace_dir, project_root="."))
         return
     if command == "/voxen profiles":
         print({name: profiles.describe(name) for name in profiles.list_profiles()})
@@ -462,6 +729,20 @@ def handle_voxen_command(
     if command.startswith("/voxen brainstorm "):
         intent = command.replace("/voxen brainstorm ", "", 1).strip()
         run_brainstorm_session(mode_name, workspace_dir, intent=intent, interactive=False)
+        return
+    if command.startswith("/voxen ui-ux-pro-max "):
+        intent = command.replace("/voxen ui-ux-pro-max ", "", 1).strip()
+        print(runner.run(pipeline_name="workflow_ui-ux-pro-max", steps=workflows.build_steps("ui-ux-pro-max", intent)))
+        return
+    if command == "/voxen ui-ux-pro-max":
+        if not allow_prompt:
+            print("Uso: /voxen ui-ux-pro-max <objetivo de design>\n")
+            return
+        intent = input("Objetivo de design: ").strip()
+        if not intent:
+            print("Objetivo vazio.\n")
+            return
+        print(runner.run(pipeline_name="workflow_ui-ux-pro-max", steps=workflows.build_steps("ui-ux-pro-max", intent)))
         return
     if command.startswith("/voxen isolate "):
         print(create_isolated_workspace(workspace_dir, command.replace("/voxen isolate ", "", 1).strip()))
@@ -558,7 +839,65 @@ def main() -> None:
 
 
 def run_single_command(raw_command: str) -> int:
+    triage = StrategicTriage()
+    inferred_mode, _ = triage.infer_strategy(raw_command)
+    selected_mode = {
+        "MICRO_SAAS": "micro_saas",
+        "DEV_TOOL_CLI": "dev_tool_cli",
+        "SUPPORT_AGENT": "support_agent",
+        "MVP_GENERIC": "mvp_generic",
+    }.get(inferred_mode, "mvp_generic")
+
     runtime = bootstrap_runtime(interactive=False)
+    if runtime["mode_name"] != selected_mode:
+        orchestrator = VoxenOrchestrator()
+        orchestrator.deploy_war_room(selected_mode)
+        workspace_dir = str(orchestrator.get_workspace_for_mode(selected_mode))
+        state_file = orchestrator.get_state_file_for_mode(selected_mode)
+        bridge = VoxenBridge(workspace_dir=workspace_dir, state_file=state_file, interactive=False)
+        runner = PipelineRunner(
+            bridge=bridge,
+            message_bus=MessageBus(bus_file=f"{workspace_dir}/message_bus.json"),
+            memory_hub=MemoryHub(memory_file=f"{workspace_dir}/_memory/memories.jsonl"),
+        )
+        context_engine = VoxenContextEngine(workspace_dir=workspace_dir)
+        workflows = VoxenWorkflows()
+        profiles = VoxenModelProfiles()
+        registry = VoxenRegistry(squads_dir="squads")
+        root = Path(__file__).resolve().parent
+        catalog = SkillsCatalog(
+            source_root=str(root / "_references" / "antigravity-awesome-skills" / "skills"),
+            source_roots=[
+                str(Path.cwd() / ".agent" / "skills"),
+                str(root / "_references" / "antigravity-kit" / ".agent" / "skills"),
+                str(root / "_references" / "antigravity-awesome-skills" / "skills"),
+            ],
+            target_root="skills",
+        )
+        bundles = VoxenBundles(catalog=catalog)
+        specialists = VoxenSpecialists(
+            source_roots=[
+                str(Path.cwd() / ".agent" / "agents"),
+                str(root / "_references" / "antigravity-kit" / ".agent" / "agents"),
+            ]
+        )
+        router = VoxenIntentRouter(specialists=specialists.list_specialists())
+        bundles.install_bundle(selected_mode, top_n=3)
+        runtime = {
+            "triage": triage,
+            "mode_name": selected_mode,
+            "workspace_dir": workspace_dir,
+            "bridge": bridge,
+            "runner": runner,
+            "context_engine": context_engine,
+            "router": router,
+            "workflows": workflows,
+            "profiles": profiles,
+            "registry": registry,
+            "catalog": catalog,
+            "bundles": bundles,
+            "specialists": specialists,
+        }
     commands = [part.strip() for part in raw_command.replace("\n", ";;").split(";;") if part.strip()]
     for command in commands:
         handle_voxen_command(
@@ -577,6 +916,27 @@ def run_single_command(raw_command: str) -> int:
             runtime["workspace_dir"],
             allow_prompt=False,
         )
+    return 0
+
+
+def run_interactive_command(raw_command: str) -> int:
+    runtime = bootstrap_runtime(interactive=False)
+    handle_voxen_command(
+        raw_command,
+        runtime["mode_name"],
+        runtime["runner"],
+        runtime["registry"],
+        runtime["catalog"],
+        runtime["bridge"],
+        runtime["context_engine"],
+        runtime["router"],
+        runtime["workflows"],
+        runtime["profiles"],
+        runtime["bundles"],
+        runtime["specialists"],
+        runtime["workspace_dir"],
+        allow_prompt=True,
+    )
     return 0
 
 

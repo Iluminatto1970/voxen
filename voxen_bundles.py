@@ -30,6 +30,13 @@ class VoxenBundles:
                 "rag-agent-implementation",
                 "integration-testing",
             ],
+            "mvp_generic": [
+                "clean-code",
+                "architecture",
+                "api-patterns",
+                "testing-patterns",
+                "frontend-design",
+            ],
         }
 
     def list_bundle(self, mode_name: str) -> list[str]:

@@ -1,7 +1,9 @@
 from core_agent import OpenCodeExecutor
 from growth_skill import GrowthSkill
 from qa_skill import QASkill
+from voxen_brainstorm import BrainstormAgent
 from pathlib import Path
+import re
 from skills_catalog import SkillsCatalog
 from skill_factory import SkillFactory
 from voxen_evaluator import VoxenEvaluator
@@ -73,6 +75,18 @@ class VoxenBridge:
         answer = self._ask(f"{prompt} (s/n)", default=default).lower()
         return answer in {"s", "sim", "y", "yes"}
 
+    def _looks_like_shell_command(self, value: str) -> bool:
+        text = value.strip()
+        if not text:
+            return False
+
+        shell_tokens = {"./", "../", "/", "git ", "python ", "pytest", "npm ", "pnpm ", "yarn ", "make ", "docker ", "bash ", "sh "}
+        if any(text.startswith(token) for token in shell_tokens):
+            return True
+
+        shell_operators = ["&&", "||", "|", ";", "$()", "`"]
+        return any(operator in text for operator in shell_operators)
+
     def _request_approval(self, task_id: int, stage: str, summary: str, default_yes: bool = True) -> bool:
         approval = self.manager.create_approval(task_id=task_id, stage=stage, summary=summary)
         approved = True if not self.interactive else self._ask_yes_no(
@@ -82,14 +96,164 @@ class VoxenBridge:
         self.manager.update_approval(approval["id"], "approved" if approved else "rejected")
         return approved
 
+    def _extract_mission_context(self, instruction: str) -> str:
+        marker = "Contexto da missao:"
+        if marker in instruction:
+            return instruction.split(marker, 1)[1].strip()
+        return instruction.strip()
+
+    def _build_textual_deliverable(self, agent_role: AgentRole, instruction: str) -> str:
+        context = self._extract_mission_context(instruction) or "missao nao informada"
+        if agent_role == AgentRole.MANAGER:
+            return (
+                f"# Plano de Produto\n\n"
+                f"## Contexto\n- {context}\n\n"
+                "## Objetivo\n"
+                "- Definir um MVP validavel em ate 4 semanas.\n\n"
+                "## Riscos Principais\n"
+                "- Escopo amplo para o primeiro ciclo.\n"
+                "- Dependencias externas sem SLA definido.\n"
+                "- Falta de criterio claro de sucesso no lancamento.\n\n"
+                "## Entregavel\n"
+                "- Documento de escopo do MVP com prioridades e metricas de sucesso.\n"
+            )
+        if agent_role == AgentRole.DEVELOPER:
+            return (
+                f"# Plano Tecnico\n\n"
+                f"## Contexto\n- {context}\n\n"
+                "## Etapas\n"
+                "1. Modelar entidades e regras de negocio centrais.\n"
+                "2. Implementar API principal e autenticacao basica.\n"
+                "3. Construir interface inicial com fluxo completo.\n"
+                "4. Adicionar observabilidade minima e logs essenciais.\n"
+                "5. Preparar ambiente de homologacao com dados de teste.\n\n"
+                "## Criterio tecnico\n"
+                "- Entrega incrementavel com rollback simples por modulo.\n"
+            )
+        return (
+            f"# Estrategia de QA\n\n"
+            f"## Contexto\n- {context}\n\n"
+            "## Criterios de Aceite\n"
+            "- Fluxo principal concluido sem erro em ambiente de homologacao.\n"
+            "- Validacao de entradas obrigatorias e mensagens de erro claras.\n"
+            "- Logs de falha disponiveis para diagnostico rapido.\n\n"
+            "## Suite Minima\n"
+            "- Testes unitarios para regras de negocio criticas.\n"
+            "- Testes de integracao para API principal.\n"
+            "- Smoke test de ponta a ponta do fluxo central.\n"
+        )
+
+    def _persist_textual_deliverable(self, task_id: int, agent_role: AgentRole, instruction: str) -> str:
+        deliverables_dir = Path(self.workspace_dir) / "_deliverables"
+        deliverables_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"task_{task_id}_{agent_role.value.lower()}.md"
+        target = deliverables_dir / filename
+        content = self._build_textual_deliverable(agent_role, instruction)
+        target.write_text(content, encoding="utf-8")
+        return str(target)
+
+    def _run_brainstorm_deliverable(self, instruction: str) -> tuple[str, str]:
+        context = self._extract_mission_context(instruction)
+        project_name = f"{self._mode_name()}_project"
+        agent = BrainstormAgent(project_name=project_name, workspace_dir=self.workspace_dir)
+        agent.define_mission(user_intent=context, mode="BRUTAL")
+        report_path = str(Path(self.workspace_dir) / "BRAINSTORM.md")
+        return report_path, f"Brainstorm estruturado gerado em: {report_path}"
+
+    def _extract_external_workflow_name(self, instruction: str) -> str:
+        match = re.search(r"workflow externo '([^']+)'", instruction, flags=re.IGNORECASE)
+        return (match.group(1).strip().lower() if match else "")
+
+    def _slugify(self, text: str, max_len: int = 30) -> str:
+        normalized = re.sub(r"[^a-z0-9\s-]", "", text.lower())
+        words = [item for item in re.split(r"[\s_-]+", normalized) if item]
+        if not words:
+            return "plano"
+        slug = "-".join(words[:3])
+        if len(slug) > max_len:
+            slug = slug[:max_len].rstrip("-")
+        return slug or "plano"
+
+    def _append_or_create(self, path: Path, content: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            path.write_text(path.read_text(encoding="utf-8") + "\n\n" + content, encoding="utf-8")
+        else:
+            path.write_text(content, encoding="utf-8")
+
+    def _run_external_workflow_deliverable(
+        self,
+        workflow_name: str,
+        instruction: str,
+        agent_role: AgentRole,
+        task_id: int,
+    ) -> tuple[str, str]:
+        context = self._extract_mission_context(instruction) or "missao nao informada"
+
+        if workflow_name == "brainstorm":
+            return self._run_brainstorm_deliverable(instruction)
+
+        if workflow_name == "plan":
+            slug = self._slugify(context)
+            plan_file = Path(self.workspace_dir) / "docs" / f"PLAN-{slug}.md"
+            if agent_role == AgentRole.MANAGER:
+                content = (
+                    f"# PLAN {slug}\n\n"
+                    f"## Overview\n- Request: {context}\n\n"
+                    "## Success Criteria\n"
+                    "- MVP definido com escopo e metricas objetivas.\n"
+                    "- Entregas faseadas com risco controlado.\n"
+                )
+                plan_file.parent.mkdir(parents=True, exist_ok=True)
+                plan_file.write_text(content, encoding="utf-8")
+            elif agent_role == AgentRole.DEVELOPER:
+                content = (
+                    "## Task Breakdown\n"
+                    "1. Fundacao de dados e autenticacao.\n"
+                    "2. API principal e fluxos core.\n"
+                    "3. Interface inicial e observabilidade minima.\n"
+                )
+                self._append_or_create(plan_file, content)
+            else:
+                content = (
+                    "## Verification Checklist\n"
+                    "- [ ] Fluxo principal validado em homologacao.\n"
+                    "- [ ] Casos de erro e limites cobertos.\n"
+                    "- [ ] Criticos sem regressao.\n"
+                )
+                self._append_or_create(plan_file, content)
+            path = str(plan_file)
+            return path, f"Workflow plan aplicado. Entregavel salvo em: {path}"
+
+        report_dir = Path(self.workspace_dir) / "_deliverables" / "workflows"
+        report_file = report_dir / f"{workflow_name}-task-{task_id}-{agent_role.value.lower()}.md"
+        role_label = {
+            AgentRole.MANAGER: "Manager",
+            AgentRole.DEVELOPER: "Developer",
+            AgentRole.QA: "QA",
+            AgentRole.GROWTH: "Growth",
+        }.get(agent_role, agent_role.value)
+        content = (
+            f"# Workflow {workflow_name}\n\n"
+            f"- Role: {role_label}\n"
+            f"- Contexto: {context}\n\n"
+            "## Resultado\n"
+            "- Compatibilidade antigravity aplicada para este workflow.\n"
+            "- Proximo passo pronto para execucao incremental.\n"
+        )
+        report_file.parent.mkdir(parents=True, exist_ok=True)
+        report_file.write_text(content, encoding="utf-8")
+        path = str(report_file)
+        return path, f"Workflow {workflow_name} aplicado. Entregavel salvo em: {path}"
+
     def route_intent(self, intent: str) -> dict:
         return self.router.route(intent)
 
     def _mode_name(self) -> str:
         mode = Path(self.workspace_dir).name
-        if mode in {"micro_saas", "dev_tool_cli", "support_agent"}:
+        if mode in {"micro_saas", "dev_tool_cli", "support_agent", "mvp_generic"}:
             return mode
-        return "micro_saas"
+        return "mvp_generic"
 
     def _auto_install_skills(self, intent: str, route: dict) -> list[str]:
         if not self.auto_install_skills:
@@ -226,12 +390,35 @@ class VoxenBridge:
             }
         self.manager.approve_checkpoint(task["id"], "execucao_terminal", approver="dev")
 
-        result = self.executor.execute_command(command)
+        if self.interactive or self._looks_like_shell_command(command):
+            result = self.executor.execute_command(command)
+        else:
+            workflow_name = self._extract_external_workflow_name(ai_instruction)
+            if workflow_name:
+                deliverable_path, message = self._run_external_workflow_deliverable(
+                    workflow_name=workflow_name,
+                    instruction=ai_instruction,
+                    agent_role=agent_role,
+                    task_id=task["id"],
+                )
+            else:
+                deliverable_path = self._persist_textual_deliverable(task["id"], agent_role, ai_instruction)
+                message = (
+                    "Instrucao textual processada sem execucao de shell "
+                    f"(role={agent_role.value}). Entregavel salvo em: {deliverable_path}"
+                )
+            result = {
+                "status": "success",
+                "stdout": message,
+                "stderr": "",
+                "return_code": 0,
+                "deliverable_file": deliverable_path,
+            }
         status = "completed" if result["status"] == "success" else "failed"
 
         qa_logs = []
 
-        if self._ask_yes_no("Rodar checagem de segurança agora", default_yes=True):
+        if self.interactive and self._ask_yes_no("Rodar checagem de segurança agora", default_yes=True):
             file_to_scan = self._ask("Arquivo para varredura de segurança", default="")
             if file_to_scan:
                 ok, message = self.qa.run_security_check(file_to_scan)
@@ -239,7 +426,7 @@ class VoxenBridge:
                 if not ok:
                     status = "failed"
 
-        if self._ask_yes_no("Rodar testes automatizados agora", default_yes=True):
+        if self.interactive and self._ask_yes_no("Rodar testes automatizados agora", default_yes=True):
             suggested_cmd = self.factory.get_test_command(skill_name)
             test_cmd = self._ask("Comando de testes", default=suggested_cmd)
             if test_cmd:

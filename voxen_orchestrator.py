@@ -22,6 +22,10 @@ class VoxenOrchestrator:
                 "context": "Foco: Retenção e Resolução. Stack: RAG/VectorDB.",
                 "state_file": "voxen_state_support_agent.json",
             },
+            "mvp_generic": {
+                "context": "Foco: Solucao geral para qualquer dominio com validacao incremental.",
+                "state_file": "voxen_state_mvp_generic.json",
+            },
         }
 
     def list_modes(self) -> list[str]:

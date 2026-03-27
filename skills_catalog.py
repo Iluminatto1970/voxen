@@ -514,6 +514,17 @@ class SkillsCatalog:
                 "vector": 5,
                 "knowledge": 4,
             },
+            "mvp_generic": {
+                "architecture": 4,
+                "api": 4,
+                "frontend": 4,
+                "backend": 4,
+                "testing": 4,
+                "security": 3,
+                "performance": 3,
+                "ux": 3,
+                "automation": 3,
+            },
         }
 
         weights = mode_token_weights.get(mode_name, {})
