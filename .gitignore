@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Runtime/state
+workspace/
+squads/
+skills/
+voxen_state*.json
+voxen_mission_lock.json
+message_bus.json
+
+# Local/private references
+_references/
+
+# Environment
+.env
+.env.*
+
+# Billing generated assets
+voxen_pix_qr.png
+voxen_pix_qr.txt

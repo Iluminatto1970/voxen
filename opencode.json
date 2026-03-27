@@ -1,0 +1,76 @@
+{
+  "name": "Voxen_Elite_Iluminatto",
+  "version": "1.2.0",
+  "orchestrator": {
+    "mode": "dynamic",
+    "agents": ["Manager", "Dev", "QA", "Growth"],
+    "approval_gates": true,
+    "message_bus": "workspace/<mode>/message_bus.json",
+    "memory_store": "workspace/<mode>/_memory/memories.jsonl"
+  },
+  "commands": [
+    "/voxen",
+    "/voxen help",
+    "/voxen list",
+    "/voxen create",
+    "/voxen run <name>",
+    "/voxen run-current",
+    "/voxen skills",
+    "/voxen install <name>",
+    "/voxen uninstall <name>",
+    "/voxen skills lock",
+    "/voxen skills pin <skill@version>",
+    "/voxen skills unpin <skill>",
+    "/voxen skills health",
+    "/voxen skills heal",
+    "/voxen skills enforce",
+    "/voxen skills sync-pins",
+    "/voxen skills validate",
+    "/voxen brainstorm",
+    "/voxen route <texto>",
+    "/voxen context",
+    "/voxen workflows",
+    "/voxen workflow <nome> <texto>",
+    "/voxen parallel <cmd1 || cmd2 || ...>",
+    "/voxen plan <texto>",
+    "/voxen enhance <texto>",
+    "/voxen preview <texto>",
+    "/voxen orchestrate <texto>",
+    "/voxen debug <texto>",
+    "/voxen test <texto>",
+    "/voxen deploy <texto>",
+    "/voxen suggest <texto>",
+    "/voxen suggest-install <texto>",
+    "/voxen bundle",
+    "/voxen bundle install",
+    "/voxen scout <texto>",
+    "/voxen eval summary",
+    "/voxen isolate <nome>",
+    "/voxen policy check <comando>",
+    "/voxen init [caminho]",
+    "/voxen context domains",
+    "/voxen status",
+    "/voxen profiles"
+  ],
+  "profiles": {
+    "MICRO_SAAS": {
+      "system_prompt": "Aja como Senior Fullstack. Priorize escalabilidade, robustez e UX limpa. Stack sugerida: Next.js + Tailwind.",
+      "tools": ["web_browser", "terminal", "file_editor"]
+    },
+    "DEV_TOOL_CLI": {
+      "system_prompt": "Aja como Engenheiro de Sistemas. Priorize performance, tratamento de erros robusto e documentacao tecnica impecavel.",
+      "tools": ["terminal", "shell_executor", "system_analysis"]
+    },
+    "SUPPORT_AGENT": {
+      "system_prompt": "Aja como Especialista em IA e Integracoes. Foque em conectar LLMs a bases de dados (RAG) e APIs de comunicacao.",
+      "tools": ["api_connector", "vector_db_manager", "message_simulator"]
+    }
+  },
+  "rules": [
+    "Nunca faca deploy sem o QA aprovar.",
+    "Todo codigo deve ter 80% de cobertura de testes.",
+    "Otimize sempre para o menor gasto de tokens possivel.",
+    "Nunca misture contextos de modo no mesmo workspace.",
+    "Bloqueie loops de mensagem entre agentes."
+  ]
+}
