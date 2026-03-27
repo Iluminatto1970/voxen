@@ -113,19 +113,33 @@ def print_voxen_suggestions(
     print()
 
 
-def run_brainstorm_session(mode_name: str, workspace_dir: str) -> None:
-    print("\nEscolha o metodo de brainstorm:")
-    print("1) GUIADO")
-    print("2) BRUTAL (Recomendado)")
-    print("3) AUDITOR")
-    selected = input("Metodo [2]: ").strip() or "2"
-    mode_map = {"1": "GUIADO", "2": "BRUTAL", "3": "AUDITOR"}
-    intent = input("Descreva a missao (ideia bruta): ").strip()
+def run_brainstorm_session(
+    mode_name: str,
+    workspace_dir: str,
+    intent: str = "",
+    brainstorm_mode: str = "BRUTAL",
+    interactive: bool = True,
+) -> None:
+    mode = brainstorm_mode.upper() if brainstorm_mode else "BRUTAL"
+    if mode not in {"GUIADO", "BRUTAL", "AUDITOR"}:
+        mode = "BRUTAL"
+
+    if interactive and not intent:
+        print("\nEscolha o metodo de brainstorm:")
+        print("1) GUIADO")
+        print("2) BRUTAL (Recomendado)")
+        print("3) AUDITOR")
+        selected = input("Metodo [2]: ").strip() or "2"
+        mode_map = {"1": "GUIADO", "2": "BRUTAL", "3": "AUDITOR"}
+        mode = mode_map.get(selected, "BRUTAL")
+        intent = input("Descreva a missao (ideia bruta): ").strip()
+
     if not intent:
-        print("Missao vazia.\n")
+        print("Missao vazia. Use /voxen brainstorm <texto>.\n")
         return
+
     agent = BrainstormAgent(project_name=f"{mode_name}_project", workspace_dir=workspace_dir)
-    blueprint = agent.define_mission(user_intent=intent, mode=mode_map.get(selected, "BRUTAL"))
+    blueprint = agent.define_mission(user_intent=intent, mode=mode)
     print("\nBlueprint gerado:")
     print(blueprint)
     print()
@@ -171,6 +185,7 @@ def voxen_help() -> None:
     print("/voxen status")
     print("/voxen profiles")
     print("/voxen brainstorm")
+    print("/voxen brainstorm <texto>")
     print("/voxen isolate <nome>")
     print("/voxen policy check <comando>")
     print("/voxen init [caminho]")
@@ -390,7 +405,11 @@ def handle_voxen_command(
         print({name: profiles.describe(name) for name in profiles.list_profiles()})
         return
     if command == "/voxen brainstorm":
-        run_brainstorm_session(mode_name, workspace_dir)
+        run_brainstorm_session(mode_name, workspace_dir, interactive=allow_prompt)
+        return
+    if command.startswith("/voxen brainstorm "):
+        intent = command.replace("/voxen brainstorm ", "", 1).strip()
+        run_brainstorm_session(mode_name, workspace_dir, intent=intent, brainstorm_mode="BRUTAL", interactive=False)
         return
     if command.startswith("/voxen isolate "):
         print(create_isolated_workspace(workspace_dir, command.replace("/voxen isolate ", "", 1).strip()))
@@ -471,7 +490,7 @@ def main() -> None:
             print("Deploy inicial marcado.\n")
             continue
         if choice == "6":
-            run_brainstorm_session(mode_name, workspace_dir)
+            run_brainstorm_session(mode_name, workspace_dir, interactive=True)
             continue
         if choice == "7":
             print("Encerrando Voxen.")
