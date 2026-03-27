@@ -68,7 +68,24 @@ def init_project_voxen(project_dir: str) -> str:
         encoding="utf-8",
     )
     launcher.chmod(0o755)
+    install_opencode_voxen_command(project_path)
     return str(target_dir)
+
+
+def install_opencode_voxen_command(project_path: Path) -> str:
+    commands_dir = project_path / ".opencode" / "commands"
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    command_file = commands_dir / "voxen.md"
+    command_file.write_text(
+        "---\n"
+        "description: Executa comandos do Voxen CLI\n"
+        "---\n"
+        "Execute o Voxen CLI no projeto e resuma o resultado de forma objetiva.\n"
+        "Use os argumentos passados para montar o comando '/voxen'.\n\n"
+        "!`./.voxen/bin/voxen --cmd \"/voxen $ARGUMENTS\"`\n",
+        encoding="utf-8",
+    )
+    return str(command_file)
 
 
 def print_voxen_suggestions(

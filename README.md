@@ -43,13 +43,17 @@ Modos de instalacao:
   ```bash
   curl -fsSL https://raw.githubusercontent.com/Iluminatto1970/voxen/main/install.sh | bash -s -- --global
   ```
-- Por projeto (diretorio atual): cria `./.voxen/bin/voxen`
+  `--global` tambem prepara o projeto alvo para OpenCode (`./.voxen/bin/voxen`
+  e `.opencode/commands/voxen.md`).
+- Por projeto (diretorio atual ou caminho informado): cria `./.voxen/bin/voxen`
   ```bash
   curl -fsSL https://raw.githubusercontent.com/Iluminatto1970/voxen/main/install.sh | bash -s -- --project
+  curl -fsSL https://raw.githubusercontent.com/Iluminatto1970/voxen/main/install.sh | bash -s -- --project /caminho/do/projeto
   ```
-- Global + projeto atual
+- Global + projeto atual (ou caminho informado)
   ```bash
   curl -fsSL https://raw.githubusercontent.com/Iluminatto1970/voxen/main/install.sh | bash -s -- --both
+  curl -fsSL https://raw.githubusercontent.com/Iluminatto1970/voxen/main/install.sh | bash -s -- --both /caminho/do/projeto
   ```
 
 Depois da instalacao global, qualquer novo projeto pode ser preparado com:
@@ -69,3 +73,16 @@ Teste apos instalar:
 ```bash
 voxen --cmd "/voxen"
 ```
+
+## Integracao com OpenCode
+
+Para o comando `/voxen` aparecer no menu de comandos do OpenCode, o projeto
+precisa ter o arquivo `.opencode/commands/voxen.md`.
+
+As opcoes abaixo ja criam esse arquivo automaticamente:
+
+- `voxen-init /caminho/do/projeto`
+- `voxen --cmd "/voxen init /caminho/do/projeto"`
+- `install.sh --global`, `install.sh --project` e `install.sh --both`
+
+Depois, reinicie o OpenCode dentro do diretorio do projeto e digite `/voxen`.

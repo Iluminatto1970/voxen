@@ -8,17 +8,48 @@ BIN_DIR="${VOXEN_BIN_DIR:-$HOME/.local/bin}"
 SRC_DIR="$INSTALL_DIR/src"
 PROJECT_DIR="${VOXEN_PROJECT_DIR:-$PWD}"
 
+create_opencode_command_file() {
+  local project_dir="$1"
+  mkdir -p "$project_dir/.opencode/commands"
+  cat > "$project_dir/.opencode/commands/voxen.md" <<'EOF'
+---
+description: Executa comandos do Voxen CLI
+---
+Execute o Voxen CLI no projeto e resuma o resultado de forma objetiva.
+Use os argumentos passados para montar o comando '/voxen'.
+
+!`./.voxen/bin/voxen --cmd "/voxen $ARGUMENTS"`
+EOF
+}
+
+is_safe_bootstrap_target() {
+  local project_dir="$1"
+  local resolved
+  resolved="$(cd "$project_dir" 2>/dev/null && pwd -P || printf "%s" "$project_dir")"
+  [[ "$resolved" == "/" ]] && return 1
+  return 0
+}
+
 MODE="global"
-if [[ "${1:-}" == "--project" ]]; then
-  MODE="project"
-  shift
-  if [[ -n "${1:-}" ]]; then
-    PROJECT_DIR="$1"
-  fi
-elif [[ "${1:-}" == "--both" ]]; then
-  MODE="both"
-elif [[ "${1:-}" == "--global" || -z "${1:-}" ]]; then
-  MODE="global"
+if [[ -n "${1:-}" ]]; then
+  case "$1" in
+    --project)
+      MODE="project"
+      shift
+      ;;
+    --both)
+      MODE="both"
+      shift
+      ;;
+    --global)
+      MODE="global"
+      shift
+      ;;
+  esac
+fi
+
+if [[ -n "${1:-}" ]]; then
+  PROJECT_DIR="$1"
 fi
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -64,7 +95,7 @@ exec python3 "$SRC_DIR/voxen.py" "\$@"
 EOF
   chmod +x "$BIN_DIR/voxen"
 
-  cat > "$BIN_DIR/voxen-init" <<EOF
+cat > "$BIN_DIR/voxen-init" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 PROJECT_DIR="\${1:-\$PWD}"
@@ -75,6 +106,16 @@ set -euo pipefail
 exec python3 "$SRC_DIR/voxen.py" "\$@"
 EOV
 chmod +x "\$PROJECT_DIR/.voxen/bin/voxen"
+mkdir -p "\$PROJECT_DIR/.opencode/commands"
+cat > "\$PROJECT_DIR/.opencode/commands/voxen.md" <<'EOV'
+---
+description: Executa comandos do Voxen CLI
+---
+Execute o Voxen CLI no projeto e resuma o resultado de forma objetiva.
+Use os argumentos passados para montar o comando '/voxen'.
+
+!`./.voxen/bin/voxen --cmd "/voxen $ARGUMENTS"`
+EOV
 cat > "\$PROJECT_DIR/.voxen/README.md" <<'EOV'
 # Voxen local do projeto
 
@@ -85,6 +126,7 @@ Use este launcher local:
 ```
 EOV
 echo "[Voxen] Projeto inicializado em \$PROJECT_DIR/.voxen"
+echo "[Voxen] Comando do OpenCode criado em \$PROJECT_DIR/.opencode/commands/voxen.md"
 EOF
   chmod +x "$BIN_DIR/voxen-init"
 
@@ -112,6 +154,7 @@ set -euo pipefail
 exec python3 "$SRC_DIR/voxen.py" "\$@"
 EOF
   chmod +x "$target_dir/bin/voxen"
+  create_opencode_command_file "$PROJECT_DIR"
 
   cat > "$target_dir/README.md" <<'EOF'
 # Voxen local do projeto
@@ -131,17 +174,32 @@ EOF
 
   echo "[Voxen] Instalacao por projeto concluida: $target_dir"
   echo "[Voxen] Use: ./.voxen/bin/voxen --cmd \"/voxen\""
+  echo "[Voxen] Comando do OpenCode: $PROJECT_DIR/.opencode/commands/voxen.md"
 }
 
 install_source
 
 if [[ "$MODE" == "global" ]]; then
   install_global
+  if is_safe_bootstrap_target "$PROJECT_DIR"; then
+    install_project
+  else
+    echo "[Voxen] Aviso: bootstrap local ignorado para diretorio nao seguro: '$PROJECT_DIR'"
+  fi
 elif [[ "$MODE" == "project" ]]; then
-  install_project
+  if is_safe_bootstrap_target "$PROJECT_DIR"; then
+    install_project
+  else
+    echo "[Voxen] Erro: diretorio de projeto invalido para bootstrap: '$PROJECT_DIR'" >&2
+    exit 1
+  fi
 else
   install_global
-  install_project
+  if is_safe_bootstrap_target "$PROJECT_DIR"; then
+    install_project
+  else
+    echo "[Voxen] Aviso: bootstrap local ignorado para diretorio nao seguro: '$PROJECT_DIR'"
+  fi
 fi
 
 echo "[Voxen] Teste rapido: voxen --cmd \"/voxen\""
