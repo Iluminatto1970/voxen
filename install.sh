@@ -6,6 +6,7 @@ BRANCH="${VOXEN_BRANCH:-main}"
 INSTALL_DIR="${VOXEN_INSTALL_DIR:-$HOME/.voxen}"
 BIN_DIR="${VOXEN_BIN_DIR:-$HOME/.local/bin}"
 SRC_DIR="$INSTALL_DIR/src"
+INSTALL_BIN_DIR="$INSTALL_DIR/bin"
 PROJECT_DIR="${VOXEN_PROJECT_DIR:-$PWD}"
 
 create_opencode_command_file() {
@@ -86,14 +87,83 @@ install_source() {
   fi
 }
 
+install_auto_update_helper() {
+  mkdir -p "$INSTALL_BIN_DIR"
+  cat > "$INSTALL_BIN_DIR/voxen_auto_update.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+ENABLED="\${VOXEN_AUTO_UPDATE:-1}"
+INTERVAL="\${VOXEN_AUTO_UPDATE_INTERVAL:-21600}"
+STATE_FILE="$INSTALL_DIR/.last_auto_update"
+SRC_DIR="$SRC_DIR"
+BRANCH="$BRANCH"
+
+if [[ "\$ENABLED" == "0" || "\$ENABLED" == "false" || "\$ENABLED" == "off" ]]; then
+  exit 0
+fi
+
+if ! [[ "\$INTERVAL" =~ ^[0-9]+$ ]]; then
+  INTERVAL=21600
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+  exit 0
+fi
+
+if [[ ! -d "\$SRC_DIR/.git" ]]; then
+  exit 0
+fi
+
+NOW="\$(date +%s)"
+LAST=0
+if [[ -f "\$STATE_FILE" ]]; then
+  LAST="\$(cat "\$STATE_FILE" 2>/dev/null || printf '0')"
+fi
+
+if [[ "\$LAST" =~ ^[0-9]+$ ]] && (( NOW - LAST < INTERVAL )); then
+  exit 0
+fi
+
+LOCAL_HEAD="\$(git -C "\$SRC_DIR" rev-parse HEAD 2>/dev/null || printf '')"
+git -C "\$SRC_DIR" fetch origin "\$BRANCH" >/dev/null 2>&1 || exit 0
+REMOTE_HEAD="\$(git -C "\$SRC_DIR" rev-parse "origin/\$BRANCH" 2>/dev/null || printf '')"
+
+if [[ -n "\$REMOTE_HEAD" && "\$LOCAL_HEAD" != "\$REMOTE_HEAD" ]]; then
+  git -C "\$SRC_DIR" checkout "\$BRANCH" >/dev/null 2>&1 || exit 0
+  git -C "\$SRC_DIR" pull --ff-only origin "\$BRANCH" >/dev/null 2>&1 || exit 0
+  printf '[Voxen] Atualizado automaticamente para a ultima versao (%s).\n' "\$BRANCH"
+fi
+
+printf '%s' "\$NOW" > "\$STATE_FILE"
+EOF
+  chmod +x "$INSTALL_BIN_DIR/voxen_auto_update.sh"
+}
+
 install_global() {
   mkdir -p "$BIN_DIR"
+  install_auto_update_helper
 
   cat > "$BIN_DIR/voxen" <<EOF
 #!/usr/bin/env bash
+if [[ -x "$INSTALL_BIN_DIR/voxen_auto_update.sh" ]]; then
+  "$INSTALL_BIN_DIR/voxen_auto_update.sh" || true
+fi
 exec python3 "$SRC_DIR/voxen.py" "\$@"
 EOF
   chmod +x "$BIN_DIR/voxen"
+
+  cat > "$BIN_DIR/voxen-update" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -x "$INSTALL_BIN_DIR/voxen_auto_update.sh" ]]; then
+  VOXEN_AUTO_UPDATE_INTERVAL=0 "$INSTALL_BIN_DIR/voxen_auto_update.sh"
+  exit 0
+fi
+echo "[Voxen] Atualizador nao encontrado em $INSTALL_BIN_DIR/voxen_auto_update.sh" >&2
+exit 1
+EOF
+  chmod +x "$BIN_DIR/voxen-update"
 
 cat > "$BIN_DIR/voxen-init" <<EOF
 #!/usr/bin/env bash
@@ -103,6 +173,9 @@ mkdir -p "\$PROJECT_DIR/.voxen/bin"
 cat > "\$PROJECT_DIR/.voxen/bin/voxen" <<'EOV'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -x "$INSTALL_BIN_DIR/voxen_auto_update.sh" ]]; then
+  "$INSTALL_BIN_DIR/voxen_auto_update.sh" || true
+fi
 exec python3 "$SRC_DIR/voxen.py" "\$@"
 EOV
 chmod +x "\$PROJECT_DIR/.voxen/bin/voxen"
@@ -131,7 +204,7 @@ EOF
   chmod +x "$BIN_DIR/voxen-init"
 
   echo "[Voxen] Instalacao global concluida."
-  echo "[Voxen] Comandos: $BIN_DIR/voxen e $BIN_DIR/voxen-init"
+  echo "[Voxen] Comandos: $BIN_DIR/voxen, $BIN_DIR/voxen-init e $BIN_DIR/voxen-update"
 
   case ":$PATH:" in
     *":$BIN_DIR:"*)
@@ -151,6 +224,9 @@ install_project() {
   cat > "$target_dir/bin/voxen" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ -x "$INSTALL_BIN_DIR/voxen_auto_update.sh" ]]; then
+  "$INSTALL_BIN_DIR/voxen_auto_update.sh" || true
+fi
 exec python3 "$SRC_DIR/voxen.py" "\$@"
 EOF
   chmod +x "$target_dir/bin/voxen"

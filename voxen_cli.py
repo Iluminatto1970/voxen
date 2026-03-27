@@ -60,10 +60,14 @@ def init_project_voxen(project_dir: str) -> str:
     bin_dir = target_dir / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     root = Path(__file__).resolve().parent
+    auto_update_helper = root.parent / "bin" / "voxen_auto_update.sh"
     launcher = bin_dir / "voxen"
     launcher.write_text(
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
+        f"if [[ -x \"{auto_update_helper}\" ]]; then\n"
+        f"  \"{auto_update_helper}\" || true\n"
+        "fi\n"
         f"exec python3 \"{root / 'voxen.py'}\" \"$@\"\n",
         encoding="utf-8",
     )

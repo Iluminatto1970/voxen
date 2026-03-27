@@ -45,6 +45,7 @@ Modos de instalacao:
   ```
   `--global` tambem prepara o projeto alvo para OpenCode (`./.voxen/bin/voxen`
   e `.opencode/commands/voxen.md`).
+  A instalacao ativa auto-update do Voxen ao executar a CLI.
 - Por projeto (diretorio atual ou caminho informado): cria `./.voxen/bin/voxen`
   ```bash
   curl -fsSL https://raw.githubusercontent.com/Iluminatto1970/voxen/main/install.sh | bash -s -- --project
@@ -73,6 +74,17 @@ Teste apos instalar:
 ```bash
 voxen --cmd "/voxen"
 ```
+
+Atualizacao manual imediata:
+
+```bash
+voxen-update
+```
+
+Controle de auto-update:
+
+- Desativar: `export VOXEN_AUTO_UPDATE=0`
+- Intervalo (segundos): `export VOXEN_AUTO_UPDATE_INTERVAL=21600`
 
 ## Integracao com OpenCode
 
