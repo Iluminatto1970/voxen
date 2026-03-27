@@ -84,8 +84,47 @@ def install_opencode_voxen_command(project_path: Path) -> str:
         "---\n"
         "description: Executa comandos do Voxen CLI\n"
         "---\n"
-        "Execute o Voxen CLI no projeto e resuma o resultado de forma objetiva.\n"
-        "Use os argumentos passados para montar o comando '/voxen'.\n\n"
+        "Voce esta operando o comando '/voxen' no projeto.\n\n"
+        "Regras de execucao:\n\n"
+        "1) Para fluxos estilo antigravity (interacao conversacional), quando '$ARGUMENTS'\n"
+        "comecar com um destes subcomandos:\n"
+        "- 'brainstorm'\n"
+        "- 'plan'\n"
+        "- 'create'\n"
+        "- 'debug'\n"
+        "- 'enhance'\n"
+        "- 'preview'\n"
+        "- 'orchestrate'\n"
+        "- 'test'\n"
+        "- 'deploy'\n"
+        "- 'workflow'\n\n"
+        "Comporte-se como workflow guiado: converse com o usuario, faca perguntas curtas\n"
+        "de contexto quando faltarem dados, apresente opcoes com tradeoffs e recomende\n"
+        "proximo passo. Nao gerar codigo na primeira resposta desse fluxo.\n\n"
+        "Formato esperado para brainstorm/plan (padrao antigravity):\n\n"
+        "```markdown\n"
+        "## 🧠 Brainstorm: [Topico]\n\n"
+        "### Context\n"
+        "[Resumo do problema]\n\n"
+        "---\n\n"
+        "### Option A: [Nome]\n"
+        "...\n\n"
+        "✅ **Pros:**\n"
+        "- ...\n\n"
+        "❌ **Cons:**\n"
+        "- ...\n\n"
+        "📊 **Effort:** Low | Medium | High\n\n"
+        "---\n\n"
+        "### Option B: [Nome]\n"
+        "...\n\n"
+        "### Option C: [Nome]\n"
+        "...\n\n"
+        "## 💡 Recommendation\n\n"
+        "**Option [X]** because [reasoning].\n\n"
+        "What direction would you like to explore?\n"
+        "```\n\n"
+        "2) Para subcomandos operacionais (status, skills, list, context, route etc),\n"
+        "execute o Voxen CLI e resuma o resultado de forma objetiva.\n\n"
         "!`./.voxen/bin/voxen --cmd \"/voxen $ARGUMENTS\"`\n",
         encoding="utf-8",
     )
@@ -148,6 +187,7 @@ def voxen_help() -> None:
     print("/voxen help")
     print("/voxen list")
     print("/voxen create")
+    print("/voxen create <texto>")
     print("/voxen run <nome>")
     print("/voxen run-current")
     print("/voxen skills")
@@ -181,6 +221,7 @@ def voxen_help() -> None:
     print("/voxen eval summary")
     print("/voxen status")
     print("/voxen profiles")
+    print("/voxen specialists")
     print("/voxen brainstorm")
     print("/voxen brainstorm <texto>")
     print("/voxen isolate <nome>")
@@ -220,7 +261,6 @@ def bootstrap_runtime(interactive: bool = True) -> dict:
         memory_hub=MemoryHub(memory_file=f"{workspace_dir}/_memory/memories.jsonl"),
     )
     context_engine = VoxenContextEngine(workspace_dir=workspace_dir)
-    router = VoxenIntentRouter()
     workflows = VoxenWorkflows()
     profiles = VoxenModelProfiles()
     registry = VoxenRegistry(squads_dir="squads")
@@ -234,7 +274,13 @@ def bootstrap_runtime(interactive: bool = True) -> dict:
         target_root="skills",
     )
     bundles = VoxenBundles(catalog=catalog)
-    specialists = VoxenSpecialists()
+    specialists = VoxenSpecialists(
+        source_roots=[
+            str(Path.cwd() / ".agent" / "agents"),
+            str(root / "_references" / "antigravity-kit" / ".agent" / "agents"),
+        ]
+    )
+    router = VoxenIntentRouter(specialists=specialists.list_specialists())
     bundles.install_bundle(mode_name, top_n=3)
 
     return {
@@ -294,6 +340,10 @@ def handle_voxen_command(
         description = input("Descricao: ").strip() or "Squad gerado via CLI"
         squad_dir = registry.create_squad(display_name, description, mode_name, get_blueprints().get(mode_name, []))
         print(f"Squad criado em {squad_dir}.\n")
+        return
+    if command.startswith("/voxen create "):
+        intent = command.replace("/voxen create ", "", 1).strip() or "entrega solicitada"
+        print(runner.run(pipeline_name="workflow_create", steps=workflows.build_steps("create", intent)))
         return
 
     if command.startswith("/voxen run "):
@@ -374,7 +424,7 @@ def handle_voxen_command(
         print(runner.run_parallel_commands("parallel_commands", commands, max_workers=min(4, len(commands))))
         return
 
-    for shortcut in ["plan", "enhance", "preview", "orchestrate", "debug", "test", "deploy"]:
+    for shortcut in ["plan", "enhance", "preview", "orchestrate", "debug", "test", "deploy", "create"]:
         prefix = f"/voxen {shortcut} "
         if command.startswith(prefix):
             intent = command.replace(prefix, "", 1).strip() or "entrega solicitada"
@@ -409,6 +459,12 @@ def handle_voxen_command(
         return
     if command == "/voxen profiles":
         print({name: profiles.describe(name) for name in profiles.list_profiles()})
+        return
+    if command == "/voxen specialists":
+        print("\nEspecialistas disponiveis:")
+        for specialist in specialists.list_specialists():
+            print(f"- @{specialist['id']} ({specialist['workflow']}): {specialist['description']}")
+        print()
         return
     if command == "/voxen brainstorm":
         run_brainstorm_session(mode_name, workspace_dir, interactive=allow_prompt)

@@ -109,3 +109,21 @@ O Voxen agora usa skills do `antigravity-kit` no projeto adaptado, com prioridad
 
 Na instalacao, o script sincroniza automaticamente o repositorio
 `https://github.com/vudovn/antigravity-kit.git` para servir de fonte de skills.
+
+## Especialistas e workflows do antigravity-kit
+
+O Voxen tambem carrega automaticamente:
+
+- `.agent/agents` (especialistas)
+- `.agent/workflows` (workflows)
+
+Prioridade de carga:
+
+1. `.agent/*` do projeto atual
+2. `_references/antigravity-kit/.agent/*` da instalacao Voxen
+
+Comandos uteis:
+
+- `/voxen specialists` para listar `@especialistas`
+- `/voxen route @frontend-specialist <texto>` para forcar roteamento
+- `/voxen workflows` para listar workflows disponiveis

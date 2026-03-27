@@ -67,7 +67,10 @@ class PipelineRunner:
 
             print(f"\n[Pipeline {pipeline_name}] Etapa {idx}: {role.value}")
             print(f"Instrucao: {instruction}")
-            approve = input("Aprova executar esta etapa? (s/n) [s]: ").strip().lower() or "s"
+            if self.bridge.interactive:
+                approve = input("Aprova executar esta etapa? (s/n) [s]: ").strip().lower() or "s"
+            else:
+                approve = "s"
             if approve not in {"s", "sim", "y", "yes"}:
                 skipped = {"step": idx, "status": "skipped", "instruction": instruction}
                 results.append(skipped)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from voxen_manager import AgentRole
 
 
@@ -8,7 +10,18 @@ class VoxenWorkflows:
     Workflows estilo antigravity-kit para execucao padronizada.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, source_roots: list[str] | None = None) -> None:
+        root = Path(__file__).resolve().parent
+        self.source_roots = [
+            Path(item)
+            for item in (
+                source_roots
+                or [
+                    str(Path.cwd() / ".agent" / "workflows"),
+                    str(root / "_references" / "antigravity-kit" / ".agent" / "workflows"),
+                ]
+            )
+        ]
         self._workflows = {
             "plan": [
                 (AgentRole.MANAGER, "Definir objetivo, riscos e entregavel da tarefa."),
@@ -54,12 +67,55 @@ class VoxenWorkflows:
                 (AgentRole.GROWTH, "Preparar impacto de negocio e comunicacao da entrega."),
             ],
         }
+        self._external_workflows = {
+            "brainstorm": "Structured idea exploration before implementation.",
+            "ui-ux-pro-max": "Workflow focado em design e experiencia de interface.",
+        }
+        self._external_workflows.update(self._load_external_workflows())
+
+    def _load_external_workflows(self) -> dict[str, str]:
+        workflows: dict[str, str] = {}
+        seen = set()
+        for root in self.source_roots:
+            if not root.exists():
+                continue
+            for file in sorted(root.glob("*.md")):
+                name = file.stem.strip().lower()
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                try:
+                    content = file.read_text(encoding="utf-8")
+                except Exception:
+                    content = ""
+                description = ""
+                if content.startswith("---\n"):
+                    end = content.find("\n---\n", 4)
+                    if end != -1:
+                        block = content[4:end]
+                        for line in block.splitlines():
+                            if line.strip().lower().startswith("description:"):
+                                description = line.split(":", 1)[1].strip()
+                                break
+                workflows[name] = description or "Workflow externo carregado do antigravity-kit."
+        return workflows
 
     def names(self) -> list[str]:
-        return sorted(self._workflows.keys())
+        return sorted(set(self._workflows.keys()) | set(self._external_workflows.keys()))
 
     def build_steps(self, workflow: str, intent: str) -> list[dict]:
-        base = self._workflows.get(workflow, self._workflows["create"])
+        normalized = workflow.strip().lower()
+        if normalized in self._workflows:
+            base = self._workflows[normalized]
+        elif normalized in self._external_workflows:
+            description = self._external_workflows[normalized]
+            base = [
+                (AgentRole.MANAGER, f"Aplicar workflow externo '{normalized}' com foco no objetivo informado. {description}"),
+                (AgentRole.DEVELOPER, f"Executar passos tecnicos do workflow '{normalized}' de forma incremental e segura."),
+                (AgentRole.QA, f"Validar entrega e riscos do workflow '{normalized}' com criterios objetivos."),
+            ]
+        else:
+            base = self._workflows["create"]
         steps = []
         for role, instruction in base:
             steps.append(

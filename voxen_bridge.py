@@ -8,6 +8,7 @@ from voxen_evaluator import VoxenEvaluator
 from voxen_policies import VoxenPolicyEngine
 from voxen_context import VoxenContextEngine
 from voxen_router import VoxenIntentRouter
+from voxen_specialists import VoxenSpecialists
 from voxen_manager import AgentRole, VoxenManager
 
 
@@ -34,7 +35,13 @@ class VoxenBridge:
         self.factory = SkillFactory()
         self.growth = GrowthSkill(workspace_dir=workspace_dir)
         self.context = VoxenContextEngine(workspace_dir=workspace_dir)
-        self.router = VoxenIntentRouter()
+        self.specialists = VoxenSpecialists(
+            source_roots=[
+                str(Path.cwd() / ".agent" / "agents"),
+                str(root / "_references" / "antigravity-kit" / ".agent" / "agents"),
+            ]
+        )
+        self.router = VoxenIntentRouter(specialists=self.specialists.list_specialists())
         self.catalog = SkillsCatalog(
             source_root=str(root / "_references" / "antigravity-awesome-skills" / "skills"),
             source_roots=[

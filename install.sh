@@ -19,8 +19,66 @@ create_opencode_command_file() {
 ---
 description: Executa comandos do Voxen CLI
 ---
-Execute o Voxen CLI no projeto e resuma o resultado de forma objetiva.
-Use os argumentos passados para montar o comando '/voxen'.
+Voce esta operando o comando `/voxen` no projeto.
+
+Regras de execucao:
+
+1) Para fluxos estilo antigravity (interacao conversacional), quando `$ARGUMENTS`
+comecar com um destes subcomandos:
+
+- `brainstorm`
+- `plan`
+- `create`
+- `debug`
+- `enhance`
+- `preview`
+- `orchestrate`
+- `test`
+- `deploy`
+- `workflow`
+
+Comporte-se como workflow guiado: converse com o usuario, faca perguntas curtas
+de contexto quando faltarem dados, apresente opcoes com tradeoffs e recomende
+proximo passo. Nao gerar codigo na primeira resposta desse fluxo.
+
+Formato esperado para brainstorm/plan (padrao antigravity):
+
+```markdown
+## 🧠 Brainstorm: [Topico]
+
+### Context
+[Resumo do problema]
+
+---
+
+### Option A: [Nome]
+...
+
+✅ **Pros:**
+- ...
+
+❌ **Cons:**
+- ...
+
+📊 **Effort:** Low | Medium | High
+
+---
+
+### Option B: [Nome]
+...
+
+### Option C: [Nome]
+...
+
+## 💡 Recommendation
+
+**Option [X]** because [reasoning].
+
+What direction would you like to explore?
+```
+
+2) Para subcomandos operacionais (status, skills, list, context, route etc),
+execute o Voxen CLI e resuma o resultado de forma objetiva.
 
 !`./.voxen/bin/voxen --cmd "/voxen $ARGUMENTS"`
 EOF
@@ -68,13 +126,26 @@ install_source() {
   if command -v git >/dev/null 2>&1; then
     if [[ -d "$SRC_DIR/.git" ]]; then
       echo "[Voxen] Atualizando instalacao existente..."
+      BEFORE_HEAD="$(git -C "$SRC_DIR" rev-parse --short HEAD 2>/dev/null || printf '')"
       git -C "$SRC_DIR" fetch origin "$BRANCH"
       git -C "$SRC_DIR" checkout "$BRANCH"
       git -C "$SRC_DIR" pull --ff-only origin "$BRANCH"
+      AFTER_HEAD="$(git -C "$SRC_DIR" rev-parse --short HEAD 2>/dev/null || printf '')"
+      if [[ -n "$BEFORE_HEAD" && -n "$AFTER_HEAD" ]]; then
+        if [[ "$BEFORE_HEAD" == "$AFTER_HEAD" ]]; then
+          echo "[Voxen] Instalacao ja estava atualizada em $AFTER_HEAD."
+        else
+          echo "[Voxen] Instalacao atualizada: $BEFORE_HEAD -> $AFTER_HEAD."
+        fi
+      fi
     else
       rm -rf "$SRC_DIR"
       echo "[Voxen] Clonando repositorio..."
       git clone --branch "$BRANCH" --depth 1 "https://github.com/$REPO.git" "$SRC_DIR"
+      CLONED_HEAD="$(git -C "$SRC_DIR" rev-parse --short HEAD 2>/dev/null || printf '')"
+      if [[ -n "$CLONED_HEAD" ]]; then
+        echo "[Voxen] Instalacao inicial concluida em $CLONED_HEAD."
+      fi
     fi
   else
     echo "[Voxen] Git nao encontrado. Usando download tar.gz..."
