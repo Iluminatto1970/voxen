@@ -98,3 +98,14 @@ As opcoes abaixo ja criam esse arquivo automaticamente:
 - `install.sh --global`, `install.sh --project` e `install.sh --both`
 
 Depois, reinicie o OpenCode dentro do diretorio do projeto e digite `/voxen`.
+
+## Skills do antigravity-kit
+
+O Voxen agora usa skills do `antigravity-kit` no projeto adaptado, com prioridade:
+
+1. `.agent/skills` do projeto atual
+2. `_references/antigravity-kit/.agent/skills` da instalacao Voxen
+3. `_references/antigravity-awesome-skills/skills`
+
+Na instalacao, o script sincroniza automaticamente o repositorio
+`https://github.com/vudovn/antigravity-kit.git` para servir de fonte de skills.

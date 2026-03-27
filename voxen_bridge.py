@@ -26,6 +26,7 @@ class VoxenBridge:
         interactive: bool = True,
         strict_pin_enforcement: bool = True,
     ) -> None:
+        root = Path(__file__).resolve().parent
         self.workspace_dir = workspace_dir
         self.executor = OpenCodeExecutor(workspace_dir=workspace_dir)
         self.manager = VoxenManager(state_file=state_file)
@@ -35,7 +36,12 @@ class VoxenBridge:
         self.context = VoxenContextEngine(workspace_dir=workspace_dir)
         self.router = VoxenIntentRouter()
         self.catalog = SkillsCatalog(
-            source_root="_references/antigravity-awesome-skills/skills",
+            source_root=str(root / "_references" / "antigravity-awesome-skills" / "skills"),
+            source_roots=[
+                str(Path.cwd() / ".agent" / "skills"),
+                str(root / "_references" / "antigravity-kit" / ".agent" / "skills"),
+                str(root / "_references" / "antigravity-awesome-skills" / "skills"),
+            ],
             target_root="skills",
         )
         self.policies = VoxenPolicyEngine()

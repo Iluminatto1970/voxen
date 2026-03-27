@@ -3,10 +3,13 @@ set -euo pipefail
 
 REPO="${VOXEN_REPO:-Iluminatto1970/voxen}"
 BRANCH="${VOXEN_BRANCH:-main}"
+AG_KIT_REPO="${VOXEN_AG_KIT_REPO:-vudovn/antigravity-kit}"
+AG_KIT_BRANCH="${VOXEN_AG_KIT_BRANCH:-main}"
 INSTALL_DIR="${VOXEN_INSTALL_DIR:-$HOME/.voxen}"
 BIN_DIR="${VOXEN_BIN_DIR:-$HOME/.local/bin}"
 SRC_DIR="$INSTALL_DIR/src"
 INSTALL_BIN_DIR="$INSTALL_DIR/bin"
+AG_KIT_REF_DIR="$SRC_DIR/_references/antigravity-kit"
 PROJECT_DIR="${VOXEN_PROJECT_DIR:-$PWD}"
 
 create_opencode_command_file() {
@@ -84,6 +87,23 @@ install_source() {
     tar -xzf "$TMP_DIR/voxen.tar.gz" -C "$TMP_DIR"
     EXTRACTED_DIR="$TMP_DIR/$(basename "$REPO")-$BRANCH"
     cp -R "$EXTRACTED_DIR"/* "$SRC_DIR"
+  fi
+}
+
+sync_antigravity_kit_reference() {
+  mkdir -p "$SRC_DIR/_references"
+  if command -v git >/dev/null 2>&1; then
+    if [[ -d "$AG_KIT_REF_DIR/.git" ]]; then
+      git -C "$AG_KIT_REF_DIR" fetch origin "$AG_KIT_BRANCH" >/dev/null 2>&1 || return 0
+      git -C "$AG_KIT_REF_DIR" checkout "$AG_KIT_BRANCH" >/dev/null 2>&1 || return 0
+      git -C "$AG_KIT_REF_DIR" pull --ff-only origin "$AG_KIT_BRANCH" >/dev/null 2>&1 || return 0
+    else
+      rm -rf "$AG_KIT_REF_DIR"
+      git clone --branch "$AG_KIT_BRANCH" --depth 1 "https://github.com/$AG_KIT_REPO.git" "$AG_KIT_REF_DIR" >/dev/null 2>&1 || return 0
+    fi
+    echo "[Voxen] Skills referencia antigravity-kit sincronizadas em $AG_KIT_REF_DIR/.agent/skills"
+  else
+    echo "[Voxen] Aviso: git nao encontrado; referencia antigravity-kit nao sincronizada."
   fi
 }
 
@@ -260,6 +280,7 @@ EOF
 }
 
 install_source
+sync_antigravity_kit_reference
 
 if [[ "$MODE" == "global" ]]; then
   install_global

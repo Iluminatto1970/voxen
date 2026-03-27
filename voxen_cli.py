@@ -121,31 +121,24 @@ def run_brainstorm_session(
     mode_name: str,
     workspace_dir: str,
     intent: str = "",
-    brainstorm_mode: str = "BRUTAL",
     interactive: bool = True,
 ) -> None:
-    mode = brainstorm_mode.upper() if brainstorm_mode else "BRUTAL"
-    if mode not in {"GUIADO", "BRUTAL", "AUDITOR"}:
-        mode = "BRUTAL"
-
     if interactive and not intent:
-        print("\nEscolha o metodo de brainstorm:")
-        print("1) GUIADO")
-        print("2) BRUTAL (Recomendado)")
-        print("3) AUDITOR")
-        selected = input("Metodo [2]: ").strip() or "2"
-        mode_map = {"1": "GUIADO", "2": "BRUTAL", "3": "AUDITOR"}
-        mode = mode_map.get(selected, "BRUTAL")
-        intent = input("Descreva a missao (ideia bruta): ").strip()
+        intent = input("Topico para brainstorm: ").strip()
 
     if not intent:
         print("Missao vazia. Use /voxen brainstorm <texto>.\n")
         return
 
     agent = BrainstormAgent(project_name=f"{mode_name}_project", workspace_dir=workspace_dir)
-    blueprint = agent.define_mission(user_intent=intent, mode=mode)
-    print("\nBlueprint gerado:")
-    print(blueprint)
+    blueprint = agent.define_mission(user_intent=intent, mode="BRUTAL")
+    report = blueprint.get("brainstorm_report", "")
+    print()
+    if report:
+        print(report)
+    else:
+        print("Blueprint gerado:")
+        print(blueprint)
     print()
 
 
@@ -197,6 +190,7 @@ def voxen_help() -> None:
 
 
 def bootstrap_runtime(interactive: bool = True) -> dict:
+    root = Path(__file__).resolve().parent
     triage = StrategicTriage()
     orchestrator = VoxenOrchestrator()
     mode_lookup = {
@@ -230,7 +224,15 @@ def bootstrap_runtime(interactive: bool = True) -> dict:
     workflows = VoxenWorkflows()
     profiles = VoxenModelProfiles()
     registry = VoxenRegistry(squads_dir="squads")
-    catalog = SkillsCatalog(source_root="_references/antigravity-awesome-skills/skills", target_root="skills")
+    catalog = SkillsCatalog(
+        source_root=str(root / "_references" / "antigravity-awesome-skills" / "skills"),
+        source_roots=[
+            str(Path.cwd() / ".agent" / "skills"),
+            str(root / "_references" / "antigravity-kit" / ".agent" / "skills"),
+            str(root / "_references" / "antigravity-awesome-skills" / "skills"),
+        ],
+        target_root="skills",
+    )
     bundles = VoxenBundles(catalog=catalog)
     specialists = VoxenSpecialists()
     bundles.install_bundle(mode_name, top_n=3)
@@ -413,7 +415,7 @@ def handle_voxen_command(
         return
     if command.startswith("/voxen brainstorm "):
         intent = command.replace("/voxen brainstorm ", "", 1).strip()
-        run_brainstorm_session(mode_name, workspace_dir, intent=intent, brainstorm_mode="BRUTAL", interactive=False)
+        run_brainstorm_session(mode_name, workspace_dir, intent=intent, interactive=False)
         return
     if command.startswith("/voxen isolate "):
         print(create_isolated_workspace(workspace_dir, command.replace("/voxen isolate ", "", 1).strip()))

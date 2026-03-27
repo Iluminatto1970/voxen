@@ -13,11 +13,18 @@ class SkillsCatalog:
     def __init__(
         self,
         source_root: str = "_references/antigravity-awesome-skills/skills",
+        source_roots: list[str] | None = None,
         target_root: str = "skills",
         lock_file: str = "skills/skills.lock.json",
         health_file: str = "skills/skills.health.json",
     ) -> None:
         self.source_root = Path(source_root)
+        merged_sources = source_roots or [
+            ".agent/skills",
+            "_references/antigravity-kit/.agent/skills",
+            source_root,
+        ]
+        self.source_roots = [Path(item) for item in merged_sources]
         self.target_root = Path(target_root)
         self.target_root.mkdir(parents=True, exist_ok=True)
         self.lock_file = Path(lock_file)
@@ -28,6 +35,25 @@ class SkillsCatalog:
             self._save_lock({"pins": {}})
         if not self.health_file.exists():
             self._save_health({"skills": {}})
+
+    def _existing_source_roots(self) -> list[Path]:
+        existing = []
+        seen = set()
+        for root in self.source_roots:
+            resolved = str(root)
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            if root.exists() and root.is_dir():
+                existing.append(root)
+        return existing
+
+    def _find_skill_source(self, skill_name: str) -> Path | None:
+        for root in self._existing_source_roots():
+            candidate = root / skill_name
+            if candidate.exists() and candidate.is_dir():
+                return candidate
+        return None
 
     def _load_lock(self) -> dict:
         try:
@@ -174,9 +200,12 @@ class SkillsCatalog:
         }
 
     def list_available(self, limit: int = 100) -> list[str]:
-        if not self.source_root.exists():
-            return []
-        skills = [p.name for p in self.source_root.iterdir() if p.is_dir()]
+        names: set[str] = set()
+        for root in self._existing_source_roots():
+            for skill_dir in root.iterdir():
+                if skill_dir.is_dir():
+                    names.add(skill_dir.name)
+        skills = sorted(names)
         skills.sort()
         return skills[:limit]
 
@@ -213,11 +242,13 @@ class SkillsCatalog:
         }
 
     def list_available_with_metadata(self, limit: int = 100) -> list[dict]:
-        if not self.source_root.exists():
-            return []
-        skills = [p for p in self.source_root.iterdir() if p.is_dir()]
-        skills.sort(key=lambda p: p.name)
-        return [self._skill_metadata(p) for p in skills[:limit]]
+        all_names = self.list_available(limit=2000)
+        metadata = []
+        for name in all_names:
+            source = self._find_skill_source(name)
+            if source is not None:
+                metadata.append(self._skill_metadata(source))
+        return metadata[:limit]
 
     def list_installed(self) -> list[str]:
         installed = [p.name for p in self.target_root.iterdir() if p.is_dir()]
@@ -299,8 +330,8 @@ class SkillsCatalog:
 
     def install(self, skill_name: str) -> tuple[bool, str]:
         name, _ = self.parse_skill_spec(skill_name)
-        source = self.source_root / name
-        if not source.exists() or not source.is_dir():
+        source = self._find_skill_source(name)
+        if source is None:
             return False, "Skill nao encontrada no catalogo de referencia."
 
         target = self.target_root / name
