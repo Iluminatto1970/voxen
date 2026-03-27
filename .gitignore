@@ -16,6 +16,8 @@ _references/
 # Environment
 .env
 .env.*
+!.env.example
+!.env.private.example
 
 # Billing generated assets
 voxen_pix_qr.png

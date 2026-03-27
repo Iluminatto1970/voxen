@@ -16,6 +16,8 @@ automacao de workflow, memoria/contexto e operacao via CLI.
 
 Use `.env.example` como template para configuracoes locais. Nunca commite segredos.
 
+Private billing work should live in the local/private branch `billing-private`.
+
 ## Quick start
 
 ```bash
