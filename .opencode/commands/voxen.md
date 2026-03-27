@@ -1,66 +1,30 @@
 ---
 description: Executa comandos do Voxen CLI
 ---
-Voce esta operando o comando `/voxen` no projeto.
+Voce esta operando `/voxen` neste projeto.
 
-Regras de execucao:
+Objetivo:
+- Para comandos de planejamento/ideacao, agir de forma conversacional no estilo antigravity-kit.
+- Para comandos operacionais, executar o Voxen CLI exatamente uma vez e resumir o resultado.
 
-1) Para fluxos estilo antigravity (interacao conversacional), quando `$ARGUMENTS`
-comecar com um destes subcomandos:
+Regras obrigatorias:
+1) Use exatamente os argumentos recebidos em `$ARGUMENTS`.
+2) Nunca reutilize a saida de um comando como novo argumento.
+3) Nunca encadeie automaticamente `route -> plan -> run`.
+4) Nao invente comandos; somente os definidos em `/voxen help`.
 
-- `brainstorm`
-- `plan`
-- `create`
-- `debug`
-- `enhance`
-- `preview`
-- `orchestrate`
-- `test`
-- `deploy`
-- `workflow`
+Roteamento:
+- Se `$ARGUMENTS` comecar com: `brainstorm`, `plan`, `create`, `debug`, `enhance`,
+  `preview`, `orchestrate`, `test`, `deploy` ou `workflow`, nao rode CLI de imediato.
+  Conduza conversa guiada, levante contexto essencial e ofereca opcoes com tradeoffs.
 
-Comporte-se como workflow guiado: converse com o usuario, faca perguntas curtas
-de contexto quando faltarem dados, apresente opcoes com tradeoffs e recomende
-proximo passo. Nao gerar codigo na primeira resposta desse fluxo.
+- Se `$ARGUMENTS` comecar com: `status`, `skills`, `list`, `context`, `route`,
+  `workflows`, `specialists`, `bundle`, `eval`, `profiles`, execute:
 
-Formato esperado:
+`./.voxen/bin/voxen --cmd "/voxen $ARGUMENTS"`
 
-```markdown
-## 🧠 Brainstorm: [Topico]
+e traga um resumo objetivo do resultado.
 
-### Context
-[Resumo curto do problema]
-
----
-
-### Option A: [Nome]
-[Descricao]
-
-✅ **Pros:**
-- ...
-
-❌ **Cons:**
-- ...
-
-📊 **Effort:** Low | Medium | High
-
----
-
-### Option B: [Nome]
-...
-
-### Option C: [Nome]
-...
-
-## 💡 Recommendation
-
-**Option [X]** because [reasoning].
-
-What direction would you like to explore?
-```
-
-2) Para subcomandos operacionais (status, skills, list, context, route etc),
-- Execute o Voxen CLI com `/voxen $ARGUMENTS`.
-- Resuma o resultado de forma objetiva.
-
-!`./.voxen/bin/voxen --cmd "/voxen $ARGUMENTS"`
+Importante:
+- Se o usuario pediu `route`, responda somente o route.
+- Nao transformar retorno de `route` em comando `plan` automaticamente.

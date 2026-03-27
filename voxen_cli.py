@@ -84,48 +84,26 @@ def install_opencode_voxen_command(project_path: Path) -> str:
         "---\n"
         "description: Executa comandos do Voxen CLI\n"
         "---\n"
-        "Voce esta operando o comando '/voxen' no projeto.\n\n"
-        "Regras de execucao:\n\n"
-        "1) Para fluxos estilo antigravity (interacao conversacional), quando '$ARGUMENTS'\n"
-        "comecar com um destes subcomandos:\n"
-        "- 'brainstorm'\n"
-        "- 'plan'\n"
-        "- 'create'\n"
-        "- 'debug'\n"
-        "- 'enhance'\n"
-        "- 'preview'\n"
-        "- 'orchestrate'\n"
-        "- 'test'\n"
-        "- 'deploy'\n"
-        "- 'workflow'\n\n"
-        "Comporte-se como workflow guiado: converse com o usuario, faca perguntas curtas\n"
-        "de contexto quando faltarem dados, apresente opcoes com tradeoffs e recomende\n"
-        "proximo passo. Nao gerar codigo na primeira resposta desse fluxo.\n\n"
-        "Formato esperado para brainstorm/plan (padrao antigravity):\n\n"
-        "```markdown\n"
-        "## 🧠 Brainstorm: [Topico]\n\n"
-        "### Context\n"
-        "[Resumo do problema]\n\n"
-        "---\n\n"
-        "### Option A: [Nome]\n"
-        "...\n\n"
-        "✅ **Pros:**\n"
-        "- ...\n\n"
-        "❌ **Cons:**\n"
-        "- ...\n\n"
-        "📊 **Effort:** Low | Medium | High\n\n"
-        "---\n\n"
-        "### Option B: [Nome]\n"
-        "...\n\n"
-        "### Option C: [Nome]\n"
-        "...\n\n"
-        "## 💡 Recommendation\n\n"
-        "**Option [X]** because [reasoning].\n\n"
-        "What direction would you like to explore?\n"
-        "```\n\n"
-        "2) Para subcomandos operacionais (status, skills, list, context, route etc),\n"
-        "execute o Voxen CLI e resuma o resultado de forma objetiva.\n\n"
-        "!`./.voxen/bin/voxen --cmd \"/voxen $ARGUMENTS\"`\n",
+        "Voce esta operando '/voxen' neste projeto.\n\n"
+        "Objetivo:\n"
+        "- Para comandos de planejamento/ideacao, agir de forma conversacional no estilo antigravity-kit.\n"
+        "- Para comandos operacionais, executar o Voxen CLI exatamente uma vez e resumir o resultado.\n\n"
+        "Regras obrigatorias:\n"
+        "1) Use exatamente os argumentos recebidos em '$ARGUMENTS'.\n"
+        "2) Nunca reutilize a saida de um comando como novo argumento.\n"
+        "3) Nunca encadeie automaticamente 'route -> plan -> run'.\n"
+        "4) Nao invente comandos; somente os definidos em '/voxen help'.\n\n"
+        "Roteamento:\n"
+        "- Se '$ARGUMENTS' comecar com: 'brainstorm', 'plan', 'create', 'debug', 'enhance',\n"
+        "  'preview', 'orchestrate', 'test', 'deploy' ou 'workflow', nao rode CLI de imediato.\n"
+        "  Conduza conversa guiada, levante contexto essencial e ofereca opcoes com tradeoffs.\n\n"
+        "- Se '$ARGUMENTS' comecar com: 'status', 'skills', 'list', 'context', 'route',\n"
+        "  'workflows', 'specialists', 'bundle', 'eval', 'profiles', execute:\n\n"
+        "`./.voxen/bin/voxen --cmd \"/voxen $ARGUMENTS\"`\n\n"
+        "e traga um resumo objetivo do resultado.\n\n"
+        "Importante:\n"
+        "- Se o usuario pediu 'route', responda somente o route.\n"
+        "- Nao transformar retorno de 'route' em comando 'plan' automaticamente.\n",
         encoding="utf-8",
     )
     return str(command_file)
@@ -154,6 +132,18 @@ def print_voxen_suggestions(
             f"skill={route['skill']}, specialist={route.get('specialist', '')}"
         )
     print()
+
+
+def route_to_serializable(route: dict) -> dict:
+    role = route.get("role")
+    return {
+        "role": getattr(role, "value", str(role)) if role is not None else "Dev",
+        "workflow": route.get("workflow", "create"),
+        "skill": route.get("skill", "automation_cli"),
+        "specialist": route.get("specialist", "backend-specialist"),
+        "score": route.get("score", 0),
+        "forced": route.get("forced", False),
+    }
 
 
 def run_brainstorm_session(
@@ -432,7 +422,7 @@ def handle_voxen_command(
             return
 
     if command.startswith("/voxen route "):
-        print(router.route(command.replace("/voxen route ", "", 1).strip()))
+        print(route_to_serializable(router.route(command.replace("/voxen route ", "", 1).strip())))
         return
     if command.startswith("/voxen suggest "):
         print_voxen_suggestions(mode_name, context_engine, catalog, workflows, router, intent=command.replace("/voxen suggest ", "", 1).strip())
