@@ -1,0 +1,59 @@
+{
+  "project": {
+    "name": "AgendaPro",
+    "slug": "agendapro",
+    "type": "web-app",
+    "domain": "productivity",
+    "description": "Plataforma para agendamento de compromissos com confirmacao automatica.",
+    "stage": "mvp",
+    "owner": {
+      "name": "Equipe Voxen",
+      "email": "contato@agendapro.com"
+    },
+    "stack": {
+      "frontend": "Next.js",
+      "backend": "FastAPI",
+      "database": "PostgreSQL",
+      "auth": "JWT",
+      "hosting": "Vercel"
+    },
+    "features": [
+      "cadastro de usuarios",
+      "agenda diaria e semanal",
+      "notificacoes por email",
+      "dashboard de compromissos",
+      "exportacao de relatorios"
+    ],
+    "metrics": {
+      "monthly_active_users_target": 1000,
+      "conversion_target_percent": 6.5,
+      "retention_target_percent": 35
+    }
+  },
+  "site": {
+    "url": "https://agendapro.example.com",
+    "title": "AgendaPro | Organize seus compromissos",
+    "language": "pt-BR",
+    "pages": [
+      "home",
+      "precos",
+      "blog",
+      "login",
+      "dashboard"
+    ],
+    "seo": {
+      "meta_description": "Sistema simples para agendar, confirmar e acompanhar compromissos em um unico painel.",
+      "keywords": [
+        "agenda online",
+        "agendamento",
+        "produtividade",
+        "dashboard"
+      ]
+    },
+    "branding": {
+      "primary_color": "#0E7490",
+      "secondary_color": "#155E75",
+      "font": "Poppins"
+    }
+  }
+}
